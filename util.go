@@ -477,6 +477,8 @@ func GetUrlsFromManifest(manifest []byte, poToken string) (map[int]string, int) 
 		return urls, -1
 	}
 
+	sqPathRe := regexp.MustCompile(`sq/\d+`)
+	sqQueryRe := regexp.MustCompile(`([?&]sq=)\d+`)
 	lastSq := -1
 
 	for _, r := range mpd.Representations {
@@ -504,8 +506,18 @@ func GetUrlsFromManifest(manifest []byte, poToken string) (map[int]string, int) 
 		}
 
 		if itag > 0 && len(r.BaseURL) > 0 {
-			formatUrl := strings.ReplaceAll(r.BaseURL, "%", "%%") + "sq/%d"
-			if len(poToken) > 0 {
+			formatUrl := strings.ReplaceAll(r.BaseURL, "%", "%%")
+			switch {
+			case strings.Contains(formatUrl, "sq/%d") || strings.Contains(formatUrl, "sq=%d"):
+				// URL already has an sq placeholder.
+			case sqPathRe.MatchString(formatUrl):
+				formatUrl = sqPathRe.ReplaceAllString(formatUrl, "sq/%d")
+			case sqQueryRe.MatchString(formatUrl):
+				formatUrl = sqQueryRe.ReplaceAllString(formatUrl, "${1}%d")
+			default:
+				formatUrl += "sq/%d"
+			}
+			if len(poToken) > 0 && !strings.Contains(formatUrl, "/pot/") {
 				formatUrl = fmt.Sprintf("%s/pot/%s", formatUrl, poToken)
 			}
 			urls[itag] = formatUrl
